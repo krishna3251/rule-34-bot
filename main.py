@@ -18,6 +18,7 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 from database import Database
+from keep_alive import start_health_server
 
 # ── Load .env ─────────────────────────────────────────────────────
 load_dotenv()
@@ -385,10 +386,17 @@ async def shutdown_cmd(ctx: commands.Context):
 #  Entry point
 # ══════════════════════════════════════════════════════════════════
 
+async def main():
+    async with bot:
+        await asyncio.gather(
+            start_health_server(),
+            bot.start(Config.TOKEN),
+        )
+
 if __name__ == "__main__":
     try:
         logger.info("🚀 Starting NatsuBot …")
-        bot.run(Config.TOKEN, log_handler=None)
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Interrupted by keyboard")
     except Exception as exc:
