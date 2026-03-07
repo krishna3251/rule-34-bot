@@ -497,7 +497,7 @@ class R34Cog(commands.Cog, name="R34"):
             return
 
         channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel) or not channel.is_nsfw():
+        if not getattr(channel, 'is_nsfw', lambda: False)():
             await interaction.response.send_message(
                 "❌ This command only works in NSFW channels.", ephemeral=True
             )
@@ -739,7 +739,7 @@ class R34Cog(commands.Cog, name="R34"):
 
     async def _prefix_search(self, ctx: commands.Context, tags: str):
         """Adapter: run the search logic via a fake interaction-like flow."""
-        if not isinstance(ctx.channel, discord.TextChannel) or not ctx.channel.is_nsfw():
+        if not getattr(ctx.channel, 'is_nsfw', lambda: False)():
             await ctx.send("❌ This command only works in NSFW channels.")
             return
 

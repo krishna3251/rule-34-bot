@@ -29,7 +29,7 @@ class Database:
         """Connect to MongoDB and create indexes."""
         try:
             self.client = motor.motor_asyncio.AsyncIOMotorClient(self.mongo_uri)
-            self.db = self.client.get_default_database()
+            self.db = self.client["r34bot"]
 
             # Bind collection references
             self.verified_users = self.db["verified_users"]

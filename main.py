@@ -345,7 +345,7 @@ async def help_slash(interaction: discord.Interaction):
         inline=False,
     )
 
-    embed.set_footer(text="Prefix commands also available: n !r34, n !r34r, n !r34g, n !r34a, n !r34h")
+    embed.set_footer(text="Prefix commands also available: n!r34, n!r34r, n!r34g, n!r34a, n!r34h | or: n r34, n r34r ...")
     await interaction.response.send_message(embed=embed)
 
 

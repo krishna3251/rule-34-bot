@@ -264,9 +264,33 @@ class VerificationCog(commands.Cog, name="Verification"):
         self.view = VerificationView(self)
 
     async def cog_load(self):
-        """Register the persistent view on cog load."""
+        """Register the persistent view and re-attach to existing messages."""
         self.bot.add_view(self.view)
         logger.info("VerificationView registered as persistent view")
+
+        # Re-attach buttons to existing verification messages after restart
+        for guild in self.bot.guilds:
+            try:
+                settings = await self.db.get_guild_settings(guild.id)
+                if not settings:
+                    continue
+                ch_id = settings.get("verification_channel_id")
+                msg_id = settings.get("verification_message_id")
+                if not ch_id or not msg_id:
+                    continue
+                channel = guild.get_channel(ch_id)
+                if not channel or not isinstance(channel, discord.TextChannel):
+                    continue
+                try:
+                    msg = await channel.fetch_message(msg_id)
+                    banner_url = settings.get("verification_banner_url")
+                    embed = _build_verification_embed(banner_url)
+                    await msg.edit(embed=embed, view=VerificationView(self))
+                    logger.info(f"Re-attached verification view in guild {guild.id}")
+                except (discord.NotFound, discord.Forbidden):
+                    logger.warning(f"Could not re-attach verification view in guild {guild.id}")
+            except Exception as e:
+                logger.warning(f"Error re-attaching view in guild {guild.id}: {e}")
 
     # ── /setup_verification ───────────────────────────────────────
 
@@ -369,6 +393,91 @@ class VerificationCog(commands.Cog, name="Verification"):
         )
 
 
+
+    # ── /set_verification_banner ──────────────────────────────────
+
+    @app_commands.command(
+        name="set_verification_banner",
+        description="Set or update the verification embed banner image.",
+    )
+    @app_commands.describe(
+        banner="Upload a banner image",
+        url="Or paste a direct URL to a banner image",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def set_verification_banner(
+        self,
+        interaction: discord.Interaction,
+        banner: discord.Attachment | None = None,
+        url: str | None = None,
+    ):
+        guild = interaction.guild
+        if guild is None:
+            return
+
+        settings = await self.db.get_guild_settings(guild.id)
+        if not settings or not settings.get("verification_channel_id"):
+            await interaction.response.send_message(
+                "❌ Run `/setup_verification` first.", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Resolve banner URL
+        banner_url: str | None = None
+        file: discord.File | None = None
+
+        if banner is not None:
+            if not banner.content_type or not banner.content_type.startswith("image/"):
+                await interaction.followup.send(
+                    "❌ The uploaded file is not an image.", ephemeral=True
+                )
+                return
+            image_bytes = await banner.read()
+            filename = banner.filename or "banner.png"
+            file = discord.File(BytesIO(image_bytes), filename=filename)
+            banner_url = f"attachment://{filename}"
+        elif url:
+            banner_url = url
+        else:
+            await interaction.followup.send(
+                "❌ Provide either a file upload or a URL.", ephemeral=True
+            )
+            return
+
+        # Edit the existing verification embed
+        ch_id = settings["verification_channel_id"]
+        msg_id = settings.get("verification_message_id")
+        channel = guild.get_channel(ch_id)
+
+        saved_url = url  # will be overwritten if attachment
+        if channel and msg_id and isinstance(channel, discord.TextChannel):
+            try:
+                msg = await channel.fetch_message(msg_id)
+                embed = _build_verification_embed(banner_url)
+                edit_kwargs: dict = {"embed": embed, "view": VerificationView(self)}
+                if file is not None:
+                    edit_kwargs["attachments"] = [file]
+                await msg.edit(**edit_kwargs)
+
+                # Grab CDN URL from the edited message for persistence
+                if banner is not None and msg.embeds and msg.embeds[0].image:
+                    saved_url = msg.embeds[0].image.url
+            except (discord.NotFound, discord.Forbidden):
+                logger.warning("Could not edit verification message for banner update")
+                await interaction.followup.send(
+                    "⚠️ Banner saved but could not update the embed (message missing or no perms).",
+                    ephemeral=True,
+                )
+                return
+
+        if saved_url:
+            await self.db.update_guild_settings(guild.id, verification_banner_url=saved_url)
+        elif url:
+            await self.db.update_guild_settings(guild.id, verification_banner_url=url)
+
+        await interaction.followup.send("✅ Banner updated!", ephemeral=True)
 
     # ── /verification_status ──────────────────────────────────────
 

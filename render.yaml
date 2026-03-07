@@ -13,3 +13,9 @@ services:
         sync: false
       - key: R34_API_KEY
         sync: false
+      - key: GELBOORU_API_KEY
+        sync: false
+      - key: GELBOORU_USER_ID
+        sync: false
+      - key: OWNER_IDS
+        sync: false

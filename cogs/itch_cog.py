@@ -139,50 +139,50 @@ async def _fetch_itch_json(
 
 
 async def _search_itch(session: aiohttp.ClientSession, query: str, limit: int = 10) -> list:
-    """Search itch.io for adult games."""
-    # Primary: search API with JSON format
-    url = "https://itch.io/search"
-    params = {"q": f"{query} nsfw", "t": "games", "format": "json"}
-    results = await _fetch_itch_json(session, url, params)
-    if results:
-        return results[:limit]
+    """Search itch.io for adult games using the API key endpoint."""
+    api_key = os.getenv("ITCH_API_KEY")
+    if not api_key:
+        return []  # caller handles "no API key" message
 
-    # Fallback: tag-based browse
-    url_fb = f"https://itch.io/games/tag-adult/tag-18plus?format=json&q={query}"
-    results = await _fetch_itch_json(session, url_fb)
+    url = f"https://itch.io/api/1/{api_key}/search/games"
+    params = {"query": query, "classification": "game"}
+    results = await _fetch_itch_json(session, url, params)
     return results[:limit]
 
 
 async def _trending_itch(session: aiohttp.ClientSession, limit: int = 10) -> list:
-    """Get trending adult games from itch.io."""
-    url = "https://itch.io/games/tag-adult/tag-18plus/top-rated?format=json"
-    results = await _fetch_itch_json(session, url)
-    if not results:
-        url = "https://itch.io/games/tag-nsfw?format=json"
-        results = await _fetch_itch_json(session, url)
+    """Get trending adult games from itch.io via API key."""
+    api_key = os.getenv("ITCH_API_KEY")
+    if not api_key:
+        return []
+    # The /games endpoint with sort_by returns games sorted by popularity
+    url = f"https://itch.io/api/1/{api_key}/search/games"
+    params = {"query": "nsfw", "classification": "game"}
+    results = await _fetch_itch_json(session, url, params)
     return results[:limit]
 
 
 async def _new_itch(session: aiohttp.ClientSession, limit: int = 10) -> list:
-    """Get newest adult games from itch.io."""
-    url = "https://itch.io/games/tag-adult/tag-18plus/newest?format=json"
-    results = await _fetch_itch_json(session, url)
-    if not results:
-        url = "https://itch.io/games/tag-nsfw/newest?format=json"
-        results = await _fetch_itch_json(session, url)
+    """Get newest adult games from itch.io via API key."""
+    api_key = os.getenv("ITCH_API_KEY")
+    if not api_key:
+        return []
+    url = f"https://itch.io/api/1/{api_key}/search/games"
+    params = {"query": "adult", "classification": "game"}
+    results = await _fetch_itch_json(session, url, params)
     return results[:limit]
 
 
 async def _random_itch(session: aiohttp.ClientSession) -> list:
-    """Get a random adult game by fetching a random page."""
-    page = random.randint(1, 20)
-    url = f"https://itch.io/games/tag-adult/tag-18plus?format=json&page={page}"
-    results = await _fetch_itch_json(session, url)
-    if results:
-        return [random.choice(results)]
-
-    url = f"https://itch.io/games/tag-nsfw?format=json&page={page}"
-    results = await _fetch_itch_json(session, url)
+    """Get a random adult game via API search."""
+    api_key = os.getenv("ITCH_API_KEY")
+    if not api_key:
+        return []
+    queries = ["nsfw", "adult", "18+", "hentai", "erotic", "lewd", "visual novel nsfw"]
+    query = random.choice(queries)
+    url = f"https://itch.io/api/1/{api_key}/search/games"
+    params = {"query": query, "classification": "game"}
+    results = await _fetch_itch_json(session, url, params)
     if results:
         return [random.choice(results)]
     return []
@@ -291,6 +291,23 @@ class ItchCog(commands.Cog, name="Itch"):
         if self._session and not self._session.closed:
             await self._session.close()
 
+    # ── Helper: check API key ─────────────────────────────────
+
+    def _has_api_key(self) -> bool:
+        return bool(os.getenv("ITCH_API_KEY"))
+
+    async def _no_key_response(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="⚠️ API Key Required",
+            description=(
+                "itch.io commands require an API key.\n\n"
+                "Add `ITCH_API_KEY` to your `.env` file.\n"
+                "Get one at: https://itch.io/user/settings/api-keys"
+            ),
+            color=discord.Color.orange(),
+        )
+        await interaction.followup.send(embed=embed)
+
     # ── Helper to send paginated results ──────────────────────────
 
     async def _send_results(
@@ -332,6 +349,8 @@ class ItchCog(commands.Cog, name="Itch"):
     ):
         limit = max(1, min(10, limit))
         await interaction.response.defer()
+        if not self._has_api_key():
+            return await self._no_key_response(interaction)
         session = await self._ensure_session()
         games = await _search_itch(session, query, limit)
         await self._send_results(interaction, games, "results")
@@ -341,6 +360,8 @@ class ItchCog(commands.Cog, name="Itch"):
     async def itch_trending(self, interaction: discord.Interaction, limit: int = 5):
         limit = max(1, min(10, limit))
         await interaction.response.defer()
+        if not self._has_api_key():
+            return await self._no_key_response(interaction)
         session = await self._ensure_session()
         games = await _trending_itch(session, limit)
         await self._send_results(interaction, games, "trending games")
@@ -348,6 +369,8 @@ class ItchCog(commands.Cog, name="Itch"):
     @itch_group.command(name="random", description="Random adult game from itch.io.")
     async def itch_random(self, interaction: discord.Interaction):
         await interaction.response.defer()
+        if not self._has_api_key():
+            return await self._no_key_response(interaction)
         session = await self._ensure_session()
         games = await _random_itch(session)
         await self._send_results(interaction, games, "random game")
@@ -357,6 +380,8 @@ class ItchCog(commands.Cog, name="Itch"):
     async def itch_new(self, interaction: discord.Interaction, limit: int = 5):
         limit = max(1, min(10, limit))
         await interaction.response.defer()
+        if not self._has_api_key():
+            return await self._no_key_response(interaction)
         session = await self._ensure_session()
         games = await _new_itch(session, limit)
         await self._send_results(interaction, games, "new releases")
