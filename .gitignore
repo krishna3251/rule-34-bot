@@ -1,0 +1,26 @@
+# Secrets
+.env
+
+# Logs
+*.log
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Vendor (dependencies installed via pip)
+vendor/
+
+# IDE / editor
+.orchids/
+
+# Runtime data
+logs/
+backups/

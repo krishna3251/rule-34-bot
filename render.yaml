@@ -1,0 +1,15 @@
+services:
+  - type: worker
+    name: rule34-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: R34_USER_ID
+        sync: false
+      - key: R34_API_KEY
+        sync: false
