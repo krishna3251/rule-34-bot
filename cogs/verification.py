@@ -264,11 +264,13 @@ class VerificationCog(commands.Cog, name="Verification"):
         self.view = VerificationView(self)
 
     async def cog_load(self):
-        """Register the persistent view and re-attach to existing messages."""
+        """Register the persistent view on cog load."""
         self.bot.add_view(self.view)
         logger.info("VerificationView registered as persistent view")
 
-        # Re-attach buttons to existing verification messages after restart
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Re-attach verification buttons after bot is fully ready."""
         for guild in self.bot.guilds:
             try:
                 settings = await self.db.get_guild_settings(guild.id)
